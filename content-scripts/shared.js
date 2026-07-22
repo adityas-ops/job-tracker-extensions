@@ -468,11 +468,12 @@ window.JobLog = window.JobLog || {};
     // Don't update if nothing useful was detected
     if (!company && !title) return;
 
-    // Don't update if data hasn't changed
+    // Don't update if data hasn't changed AND widget is active in DOM
     if (
       company === currentData.company &&
       title === currentData.title &&
-      source === currentData.source
+      source === currentData.source &&
+      document.getElementById("joblog-widget")
     ) {
       return;
     }

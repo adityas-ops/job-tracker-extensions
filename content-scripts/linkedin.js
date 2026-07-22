@@ -64,8 +64,49 @@
       document.querySelector("[class*='jobDetails']") ||
       document.querySelector("[class*='job-details']") ||
       document.querySelector(".jobs-unified-top-card") ||
-      document.querySelector(".job-details-jobs-unified-top-card")
+      document.querySelector(".job-details-jobs-unified-top-card") ||
+      document.querySelector("main")
     );
+  }
+
+  // Helper to extract company name from panel's top card
+  function scrapeCompanyFromTopCard(panel) {
+    const companySelectors = [
+      ".job-details-jobs-unified-top-card__company-name a",
+      ".job-details-jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__company-name a",
+      ".jobs-unified-top-card__company-name",
+      ".topcard__org-name-link",
+      ".top-card-layout__first-sub-heading a",
+      ".top-card-layout__first-sub-heading",
+      ".job-details-jobs-unified-top-card__primary-description-container a",
+      ".artdeco-entity-lockup__subtitle a",
+      ".artdeco-entity-lockup__subtitle"
+    ];
+
+    for (const sel of companySelectors) {
+      const el = panel.querySelector(sel);
+      if (el && el.textContent.trim()) {
+        let raw = el.textContent.trim();
+        raw = raw.replace(/logo$/i, "").split("·")[0].split("•")[0].split("\n")[0].trim();
+        if (!isInvalidCompany(raw)) {
+          return raw;
+        }
+      }
+    }
+
+    const companyLinks = panel.querySelectorAll('a[href*="/company/"]');
+    for (const link of companyLinks) {
+      let text = link.textContent.trim();
+      if (text && !text.includes("http") && !text.toLowerCase().includes("see all")) {
+        text = text.replace(/logo$/i, "").split("·")[0].split("•")[0].split("\n")[0].trim();
+        if (!isInvalidCompany(text)) {
+          return text;
+        }
+      }
+    }
+
+    return "";
   }
 
   // ── Scrape job details from the detail panel ──
@@ -96,21 +137,30 @@
       for (const text of textsToTest) {
         if (!text) continue;
 
-        // Pattern: "(Easy )Apply ... to [TITLE] at [COMPANY]"
-        const applyMatch = text.match(/(?:Easy\s+)?Apply(?:\s+on\s+[^\s]+(?:\s+[^\s]+)?)?\s+to\s+(.+?)\s+at\s+(.+)/i);
+        // Pattern: "(Easy )Apply ... to [TITLE] (at [COMPANY] | on company website)"
+        const applyMatch = text.match(/(?:Easy\s+)?Apply(?:\s+on\s+[^\s]+(?:\s+[^\s]+)?)?\s+to\s+(.+?)(?:\s+at\s+(.+))?$/i);
         if (applyMatch) {
-          const candidateTitle = applyMatch[1].trim();
-          const candidateCompany = applyMatch[2].trim();
+          const candidateTitle = applyMatch[1]
+            .trim()
+            .replace(/\s+on\s+company\s+website$/i, "")
+            .replace(/\s+externally$/i, "");
+          let candidateCompany = applyMatch[2] ? applyMatch[2].trim() : "";
+          if (!candidateCompany) {
+            candidateCompany = scrapeCompanyFromTopCard(panel);
+          }
           if (!isInvalidTitle(candidateTitle) && !isInvalidCompany(candidateCompany)) {
             return { title: candidateTitle, company: candidateCompany };
           }
         }
 
         // Pattern: "Save [TITLE] at [COMPANY]"
-        const saveMatch = text.match(/Save\s+(.+?)\s+at\s+(.+)/i);
+        const saveMatch = text.match(/Save\s+(.+?)(?:\s+at\s+(.+))?$/i);
         if (saveMatch) {
           const candidateTitle = saveMatch[1].trim();
-          const candidateCompany = saveMatch[2].trim();
+          let candidateCompany = saveMatch[2] ? saveMatch[2].trim() : "";
+          if (!candidateCompany) {
+            candidateCompany = scrapeCompanyFromTopCard(panel);
+          }
           if (!isInvalidTitle(candidateTitle) && !isInvalidCompany(candidateCompany)) {
             return { title: candidateTitle, company: candidateCompany };
           }
@@ -128,45 +178,7 @@
       panel;
 
     // 1. Company from Top Card
-    const companySelectors = [
-      ".job-details-jobs-unified-top-card__company-name a",
-      ".job-details-jobs-unified-top-card__company-name",
-      ".jobs-unified-top-card__company-name a",
-      ".jobs-unified-top-card__company-name",
-      ".topcard__org-name-link",
-      ".top-card-layout__first-sub-heading a",
-      ".top-card-layout__first-sub-heading",
-      ".job-details-jobs-unified-top-card__primary-description-container a",
-      ".artdeco-entity-lockup__subtitle a",
-      ".artdeco-entity-lockup__subtitle"
-    ];
-
-    for (const sel of companySelectors) {
-      const el = topCard.querySelector(sel);
-      if (el && el.textContent.trim()) {
-        let raw = el.textContent.trim();
-        raw = raw.replace(/logo$/i, "").split("·")[0].split("•")[0].split("\n")[0].trim();
-        if (!isInvalidCompany(raw)) {
-          company = raw;
-          break;
-        }
-      }
-    }
-
-    // Fallback: Check topCard links with /company/ in href
-    if (!company) {
-      const companyLinks = topCard.querySelectorAll('a[href*="/company/"]');
-      for (const link of companyLinks) {
-        let text = link.textContent.trim();
-        if (text && !text.includes("http") && !text.toLowerCase().includes("see all")) {
-          text = text.replace(/logo$/i, "").split("·")[0].split("•")[0].split("\n")[0].trim();
-          if (!isInvalidCompany(text)) {
-            company = text;
-            break;
-          }
-        }
-      }
-    }
+    company = scrapeCompanyFromTopCard(topCard);
 
     // 2. Title from Top Card
     const titleSelectors = [
@@ -258,7 +270,8 @@
     if (!title && !company) return;
 
     const key = `${company}|${title}`;
-    if (key === lastKey) return;
+    // If widget exists in DOM and data hasn't changed, skip
+    if (key === lastKey && document.getElementById("joblog-widget")) return;
     lastKey = key;
 
     if (window.JobLog && typeof window.JobLog.updateJobWidget === "function") {
