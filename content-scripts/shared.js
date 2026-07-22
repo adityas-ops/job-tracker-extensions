@@ -51,7 +51,7 @@ window.JobLog = window.JobLog || {};
 
       #joblog-widget {
         position: fixed !important;
-        bottom: 24px !important;
+        bottom: 70px !important;
         right: 24px !important;
         z-index: 2147483647 !important;
         animation: joblog-slidein 0.35s cubic-bezier(0.34,1.56,0.64,1) !important;
@@ -251,7 +251,14 @@ window.JobLog = window.JobLog || {};
       #joblog-widget.jl-minimized .jl-card { display: none !important; }
       #joblog-widget.jl-minimized .jl-mini { display: flex !important; }
     `;
-    (document.head || document.documentElement).appendChild(style);
+    const targetHeader = document.head || document.documentElement || document.body;
+    if (targetHeader) {
+      targetHeader.appendChild(style);
+    } else {
+      document.addEventListener("DOMContentLoaded", () => {
+        (document.head || document.documentElement || document.body).appendChild(style);
+      });
+    }
   }
 
   // ── Build the widget DOM ──
@@ -472,6 +479,8 @@ window.JobLog = window.JobLog || {};
 
     currentData = { company, title, source };
     isSaved = false;
+
+    console.log("[JobLog] Detected job details:", company, "-", title, "(Source:", source + ")");
 
     // Create widget if it doesn't exist (user closed it, first detection, etc.)
     if (!widgetEl || !document.getElementById("joblog-widget")) {
